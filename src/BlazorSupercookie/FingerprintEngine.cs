@@ -149,13 +149,12 @@ public sealed class FingerprintEngine
     /// </summary>
     private static IEnumerable<string> GenerateRoutes(string cacheIdentifier, int count)
     {
-        using var md5 = MD5.Create();
         var routes = new string[count];
 
         for (var i = 0; i < count; i++)
         {
             var input = $"{cacheIdentifier}{i}";
-            var hashBytes = md5.HashData(Encoding.UTF8.GetBytes(input));
+            var hashBytes = MD5.HashData(Encoding.UTF8.GetBytes(input));
             var base64 = Convert.ToBase64String(hashBytes)
                 .Replace("=", "0", StringComparison.Ordinal)
                 .Replace("+", "0", StringComparison.Ordinal)

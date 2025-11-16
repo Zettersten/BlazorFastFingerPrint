@@ -36,7 +36,8 @@ public sealed class FingerprintService : IDisposable
     /// <returns>The fingerprint session</returns>
     public FingerprintSession GetOrCreateSession(string sessionId, ulong? identifier = null)
     {
-        ObjectDisposedException.ThrowIfDisposed(_disposed);
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(FingerprintService));
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         return _sessions.GetOrAdd(sessionId, _ => new FingerprintSession(sessionId, _engine, identifier));
@@ -49,7 +50,8 @@ public sealed class FingerprintService : IDisposable
     /// <returns>The session, or null if not found</returns>
     public FingerprintSession? GetSession(string sessionId)
     {
-        ObjectDisposedException.ThrowIfDisposed(_disposed);
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(FingerprintService));
         return _sessions.TryGetValue(sessionId, out var session) ? session : null;
     }
 
@@ -60,7 +62,8 @@ public sealed class FingerprintService : IDisposable
     /// <returns>True if the session was removed</returns>
     public bool RemoveSession(string sessionId)
     {
-        ObjectDisposedException.ThrowIfDisposed(_disposed);
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(FingerprintService));
         return _sessions.TryRemove(sessionId, out _);
     }
 
@@ -71,7 +74,8 @@ public sealed class FingerprintService : IDisposable
     /// <returns>Number of sessions removed</returns>
     public int CleanupExpiredSessions(TimeSpan maxAge)
     {
-        ObjectDisposedException.ThrowIfDisposed(_disposed);
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(FingerprintService));
 
         var cutoff = DateTimeOffset.UtcNow - maxAge;
         var removed = 0;
