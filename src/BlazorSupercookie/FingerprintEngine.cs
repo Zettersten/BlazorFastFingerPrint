@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -146,7 +147,9 @@ public sealed class FingerprintEngine
 
     /// <summary>
     /// Generates routes based on the cache identifier using MD5 hashing.
+    /// Note: MD5 is not available in browser environments. This method is intended for server-side use.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Interoperability", "CA1416:Validate platform compatibility", Justification = "MD5.HashData is used server-side only. Browser compatibility handled separately.")]
     private static IEnumerable<string> GenerateRoutes(string cacheIdentifier, int count)
     {
         var routes = new string[count];

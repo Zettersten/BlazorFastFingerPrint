@@ -19,7 +19,7 @@ var app = builder.Build();
 
 app.UseCors();
 
-app.MapGet("/f/{route}", (string route, FingerprintEngine engine) =>
+app.MapGet("/f/{route}", (string route, FingerprintEngine engine, HttpContext context) =>
 {
     if (!engine.IsValidRoute(route))
     {
@@ -28,15 +28,14 @@ app.MapGet("/f/{route}", (string route, FingerprintEngine engine) =>
 
     var data = engine.FaviconData;
     
+    context.Response.Headers.CacheControl = "public, max-age=31536000";
+    context.Response.Headers.Expires = DateTimeOffset.UtcNow.AddYears(1).ToString("R");
+    
     return Results.File(
         data.ToArray(),
         "image/png",
         null,
-        new Microsoft.Net.Http.Headers.CacheControlHeaderValue
-        {
-            Public = true,
-            MaxAge = TimeSpan.FromDays(365)
-        });
+        enableRangeProcessing: true);
 })
 .WithName("GetFavicon")
 .WithOpenApi();

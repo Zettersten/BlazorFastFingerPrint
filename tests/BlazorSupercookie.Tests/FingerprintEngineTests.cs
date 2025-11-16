@@ -165,7 +165,7 @@ public class FingerprintEngineTests
         var engine = new FingerprintEngine(TestCacheId, 8);
         var data = engine.FaviconData;
         
-        Assert.NotEmpty(data);
+        Assert.True(data.Length > 0);
         // PNG signature
         Assert.Equal(0x89, data[0]);
         Assert.Equal(0x50, data[1]);

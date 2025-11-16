@@ -20,7 +20,7 @@ public sealed class FingerprintSession
     /// <param name="sessionId">Unique session identifier</param>
     /// <param name="engine">The fingerprint engine</param>
     /// <param name="identifier">Optional identifier for write mode</param>
-    internal FingerprintSession(string sessionId, FingerprintEngine engine, ulong? identifier = null)
+    public FingerprintSession(string sessionId, FingerprintEngine engine, ulong? identifier = null)
     {
         SessionId = sessionId;
         _engine = engine;

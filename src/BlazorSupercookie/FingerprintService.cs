@@ -92,6 +92,9 @@ public sealed class FingerprintService : IDisposable
         return removed;
     }
 
+    /// <summary>
+    /// Releases all resources used by the FingerprintService.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

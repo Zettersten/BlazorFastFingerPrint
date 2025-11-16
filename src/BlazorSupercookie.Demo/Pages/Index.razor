@@ -1,6 +1,7 @@
 @page "/"
 @using BlazorSupercookie
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
 
 <PageTitle>BlazorSupercookie Demo</PageTitle>
 
@@ -159,8 +160,7 @@
 
     private static string GetFingerprintHash(ulong fingerprint)
     {
-        using var md5 = System.Security.Cryptography.MD5.Create();
-        var hashBytes = md5.HashData(BitConverter.GetBytes(fingerprint));
+        var hashBytes = System.Security.Cryptography.MD5.HashData(BitConverter.GetBytes(fingerprint));
         var hash = Convert.ToHexString(hashBytes);
         return hash[..12].ToUpperInvariant();
     }
