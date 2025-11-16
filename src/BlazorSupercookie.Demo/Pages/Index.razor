@@ -1,0 +1,176 @@
+@page "/"
+@using BlazorSupercookie
+@using Microsoft.AspNetCore.Components
+
+<PageTitle>BlazorSupercookie Demo</PageTitle>
+
+<div class="demo-container">
+    <div class="demo-header">
+        <h1>🔒 BlazorSupercookie</h1>
+        <p class="subtitle">Enterprise-grade browser fingerprinting using favicon caching</p>
+    </div>
+
+    <div class="demo-content">
+        <SupercookieComponent 
+            @ref="_component"
+            CacheIdentifier="blazor-supercookie-demo"
+            RouteCount="32"
+            BaseUrl="@GetApiBaseUrl()"
+            ShowProgress="true"
+            OnFingerprintComplete="HandleFingerprintComplete"
+            OnError="HandleError" />
+
+        <div class="demo-controls">
+            <button 
+                class="btn btn-primary" 
+                @onclick="ReadFingerprint"
+                disabled="@(_component?.IsActive ?? false)">
+                🔍 Read Fingerprint
+            </button>
+            
+            <button 
+                class="btn btn-secondary" 
+                @onclick="WriteFingerprint"
+                disabled="@(_component?.IsActive ?? false)">
+                ✍️ Write Fingerprint
+            </button>
+            
+            <button 
+                class="btn btn-danger" 
+                @onclick="ClearResults"
+                disabled="@(_component?.IsActive ?? false)">
+                🗑️ Clear
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-error">
+                <strong>Error:</strong> @_errorMessage
+            </div>
+        }
+
+        @if (_fingerprintResult.HasValue)
+        {
+            <div class="result-card">
+                <h2>Fingerprint Result</h2>
+                <div class="fingerprint-display">
+                    <div class="fingerprint-value">@_fingerprintResult.Value</div>
+                    <div class="fingerprint-hash">@GetFingerprintHash(_fingerprintResult.Value)</div>
+                </div>
+                <div class="fingerprint-info">
+                    <p><strong>Mode:</strong> @(_isReadMode ? "Read" : "Write")</p>
+                    <p><strong>Timestamp:</strong> @DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC")</p>
+                </div>
+            </div>
+        }
+        else if (_fingerprintResult == null && !string.IsNullOrEmpty(_lastAction))
+        {
+            <div class="result-card">
+                <p class="no-fingerprint">No fingerprint detected. This could mean:</p>
+                <ul>
+                    <li>First visit (no fingerprint set yet)</li>
+                    <li>Browser cache was cleared</li>
+                    <li>Private/Incognito mode (may not persist)</li>
+                    <li>Browser doesn't support favicon caching</li>
+                </ul>
+            </div>
+        }
+
+        <div class="info-section">
+            <h3>How It Works</h3>
+            <div class="info-grid">
+                <div class="info-card">
+                    <h4>1. Write Mode</h4>
+                    <p>When you click "Write Fingerprint", the component generates a unique identifier and encodes it as a binary vector. Each bit corresponds to a specific favicon route that gets cached in your browser.</p>
+                </div>
+                <div class="info-card">
+                    <h4>2. Read Mode</h4>
+                    <p>When you click "Read Fingerprint", the component checks which favicon routes are cached. By detecting which routes are cached, it can reconstruct your unique identifier.</p>
+                </div>
+                <div class="info-card">
+                    <h4>3. Persistence</h4>
+                    <p>Unlike cookies or localStorage, favicon cache persists even after clearing browser data, closing the browser, or using incognito mode. This makes it a powerful (and privacy-concerning) tracking method.</p>
+                </div>
+            </div>
+            
+            <div class="api-note">
+                <h4>📌 API Backend Required</h4>
+                <p>This demo requires a backend API to serve favicons. For local development, run the <code>BlazorSupercookie.Api</code> project on port 5002. For production deployment, deploy the API separately or use a serverless function.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private SupercookieComponent? _component;
+    private ulong? _fingerprintResult;
+    private string _errorMessage = string.Empty;
+    private string _lastAction = string.Empty;
+    private bool _isReadMode;
+
+    private async Task ReadFingerprint()
+    {
+        _errorMessage = string.Empty;
+        _lastAction = "read";
+        _isReadMode = true;
+
+        if (_component is not null)
+        {
+            _fingerprintResult = await _component.ReadFingerprintAsync();
+        }
+    }
+
+    private async Task WriteFingerprint()
+    {
+        _errorMessage = string.Empty;
+        _lastAction = "write";
+        _isReadMode = false;
+
+        // Generate a random identifier for demo purposes
+        var random = new Random();
+        var identifier = (ulong)random.NextInt64(1, (long)Math.Pow(2, 32) - 1);
+
+        if (_component is not null)
+        {
+            await _component.WriteFingerprintAsync(identifier);
+            _fingerprintResult = identifier;
+        }
+    }
+
+    private void ClearResults()
+    {
+        _fingerprintResult = null;
+        _errorMessage = string.Empty;
+        _lastAction = string.Empty;
+    }
+
+    private Task HandleFingerprintComplete(ulong? identifier)
+    {
+        _fingerprintResult = identifier;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleError(string error)
+    {
+        _errorMessage = error;
+        return Task.CompletedTask;
+    }
+
+    private static string GetFingerprintHash(ulong fingerprint)
+    {
+        using var md5 = System.Security.Cryptography.MD5.Create();
+        var hashBytes = md5.HashData(BitConverter.GetBytes(fingerprint));
+        var hash = Convert.ToHexString(hashBytes);
+        return hash[..12].ToUpperInvariant();
+    }
+
+    private string GetApiBaseUrl()
+    {
+        // For local development, use the API project
+        // For production/GitHub Pages, this should point to your deployed API
+        // You can configure this via environment variables or app settings
+        var apiUrl = Environment.GetEnvironmentVariable("FAVICON_API_URL");
+        return string.IsNullOrEmpty(apiUrl) ? "http://localhost:5002/" : apiUrl;
+    }
+}

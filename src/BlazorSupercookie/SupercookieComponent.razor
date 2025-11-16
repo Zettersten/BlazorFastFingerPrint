@@ -1,0 +1,228 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+@inject IJSRuntime JSRuntime
+
+<div @ref="_containerRef" class="blazor-supercookie-container">
+    @if (ShowProgress && IsActive)
+    {
+        <div class="blazor-supercookie-progress">
+            <div class="blazor-supercookie-progress-bar" style="width: @($"{ProgressPercent}%")"></div>
+            <span class="blazor-supercookie-progress-text">@ProgressText</span>
+        </div>
+    }
+</div>
+
+@code {
+    private ElementReference _containerRef;
+    private IJSObjectReference? _jsModule;
+    private DotNetObjectReference<SupercookieComponent>? _dotNetRef;
+    private bool _disposed;
+
+    /// <summary>
+    /// Gets or sets the cache identifier for route generation.
+    /// </summary>
+    [Parameter] public string CacheIdentifier { get; set; } = "default";
+
+    /// <summary>
+    /// Gets or sets the number of routes to generate (default: 32).
+    /// </summary>
+    [Parameter] public int RouteCount { get; set; } = 32;
+
+    /// <summary>
+    /// Gets or sets the base URL for favicon routes.
+    /// </summary>
+    [Parameter] public string BaseUrl { get; set; } = "/";
+
+    /// <summary>
+    /// Gets or sets whether to show progress indicator.
+    /// </summary>
+    [Parameter] public bool ShowProgress { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the callback invoked when fingerprinting completes.
+    /// </summary>
+    [Parameter] public EventCallback<ulong?> OnFingerprintComplete { get; set; }
+
+    /// <summary>
+    /// Gets or sets the callback invoked when an error occurs.
+    /// </summary>
+    [Parameter] public EventCallback<string> OnError { get; set; }
+
+    /// <summary>
+    /// Gets whether fingerprinting is currently active.
+    /// </summary>
+    public bool IsActive { get; private set; }
+
+    /// <summary>
+    /// Gets the current progress percentage (0-100).
+    /// </summary>
+    public double ProgressPercent { get; private set; }
+
+    /// <summary>
+    /// Gets the current progress text.
+    /// </summary>
+    public string ProgressText { get; private set; } = string.Empty;
+
+    private FingerprintEngine? _engine;
+    private FingerprintSession? _session;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _dotNetRef = DotNetObjectReference.Create(this);
+                _jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>(
+                    "import", "./_content/BlazorSupercookie/js/supercookie.js");
+
+                _engine = new FingerprintEngine(CacheIdentifier, RouteCount);
+            }
+            catch (Exception ex)
+            {
+                await OnError.InvokeAsync(ex.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts fingerprinting in read mode (detecting existing fingerprint).
+    /// </summary>
+    public async Task<ulong?> ReadFingerprintAsync(int? storageSize = null)
+    {
+        if (_jsModule is null || _engine is null)
+            throw new InvalidOperationException("Component not initialized");
+
+        if (IsActive)
+            throw new InvalidOperationException("Fingerprinting already in progress");
+
+        try
+        {
+            IsActive = true;
+            var sessionId = Guid.NewGuid().ToString("N");
+            _session = new FingerprintSession(sessionId, _engine);
+
+            var size = storageSize ?? (int)Math.Floor(Math.Log2(_engine.MaxIdentifier)) + 1;
+            var routes = _session.GetRoutesToVisit(size);
+
+            ProgressText = "Reading fingerprint...";
+            StateHasChanged();
+
+            var cachedRoutes = await _jsModule.InvokeAsync<string[]>(
+                "checkFaviconCache",
+                _dotNetRef,
+                BaseUrl,
+                routes);
+
+            _session = new FingerprintSession(sessionId, _engine);
+            foreach (var route in cachedRoutes)
+            {
+                _session.RecordVisitedRoute(route);
+            }
+
+            var identifier = _session.CalculateIdentifier();
+            ProgressPercent = 100;
+            ProgressText = identifier.HasValue 
+                ? $"Fingerprint: {identifier.Value}" 
+                : "No fingerprint detected";
+
+            await OnFingerprintComplete.InvokeAsync(identifier);
+            return identifier;
+        }
+        catch (Exception ex)
+        {
+            await OnError.InvokeAsync(ex.Message);
+            return null;
+        }
+        finally
+        {
+            IsActive = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Starts fingerprinting in write mode (setting a fingerprint).
+    /// </summary>
+    public async Task WriteFingerprintAsync(ulong identifier)
+    {
+        if (_jsModule is null || _engine is null)
+            throw new InvalidOperationException("Component not initialized");
+
+        if (IsActive)
+            throw new InvalidOperationException("Fingerprinting already in progress");
+
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(identifier, _engine.MaxIdentifier);
+
+        try
+        {
+            IsActive = true;
+            var sessionId = Guid.NewGuid().ToString("N");
+            _session = new FingerprintSession(sessionId, _engine, identifier);
+
+            var routes = _session.GetRoutesToCache();
+            var totalRoutes = routes.Length;
+            var processed = 0;
+
+            ProgressText = "Writing fingerprint...";
+            StateHasChanged();
+
+            await _jsModule.InvokeVoidAsync(
+                "cacheFavicons",
+                _dotNetRef,
+                BaseUrl,
+                routes,
+                totalRoutes);
+
+            ProgressPercent = 100;
+            ProgressText = $"Fingerprint written: {identifier}";
+
+            await OnFingerprintComplete.InvokeAsync(identifier);
+        }
+        catch (Exception ex)
+        {
+            await OnError.InvokeAsync(ex.Message);
+        }
+        finally
+        {
+            IsActive = false;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public void UpdateProgress(int current, int total, string? text = null)
+    {
+        ProgressPercent = total > 0 ? (current * 100.0 / total) : 0;
+        ProgressText = text ?? $"Processing {current} of {total}...";
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+
+        if (_dotNetRef is not null)
+        {
+            _dotNetRef.Dispose();
+            _dotNetRef = null;
+        }
+
+        if (_jsModule is not null)
+        {
+            try
+            {
+                await _jsModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Ignore if JS context is disconnected
+            }
+            _jsModule = null;
+        }
+    }
+}
